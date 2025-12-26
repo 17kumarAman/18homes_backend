@@ -1,14 +1,17 @@
-// ========================= contact.controller.js (COMPLETE & SIMPLIFIED) =========================
 import Contact from "../models/contact.model.js";
 import Property from "../models/property.model.js";
 import sendResponse from "../utils/apiResponse.js";
 
-/**
- * CREATE CONTACT - 99acres jaisa
- */
+/* ======================================================
+   CREATE CONTACT (USER)
+====================================================== */
 export const createContact = async (req, res) => {
   try {
     const { propertyId, message } = req.body;
+
+    if (!propertyId) {
+      return sendResponse(res, 400, false, "Property ID is required");
+    }
 
     const property = await Property.findById(propertyId).populate(
       "owner",
@@ -19,12 +22,28 @@ export const createContact = async (req, res) => {
       return sendResponse(res, 404, false, "Property not found");
     }
 
+    // ❌ Owner cannot contact own property
     if (property.owner._id.toString() === req.user._id.toString()) {
       return sendResponse(
         res,
         400,
         false,
         "You cannot contact your own property"
+      );
+    }
+
+    // ❌ Prevent duplicate contact
+    const alreadyContacted = await Contact.findOne({
+      property: propertyId,
+      buyer: req.user._id,
+    });
+
+    if (alreadyContacted) {
+      return sendResponse(
+        res,
+        409,
+        false,
+        "You have already contacted for this property"
       );
     }
 
@@ -35,28 +54,22 @@ export const createContact = async (req, res) => {
       message,
     });
 
-    return sendResponse(
-      res,
-      201,
-      true,
-      "Contact request sent. Here are owner details:",
-      {
-        contact,
-        ownerDetails: {
-          name: property.owner.name,
-          email: property.owner.email,
-          phone: property.owner.phone,
-        },
-      }
-    );
+    return sendResponse(res, 201, true, "Contact request sent successfully", {
+      contact,
+      ownerDetails: {
+        name: property.owner.name,
+        email: property.owner.email,
+        phone: property.owner.phone,
+      },
+    });
   } catch (error) {
     return sendResponse(res, 500, false, error.message);
   }
 };
 
-/**
- * GET MY CONTACTS
- */
+/* ======================================================
+   GET MY CONTACTS (USER / ADMIN)
+====================================================== */
 export const getMyContacts = async (req, res) => {
   try {
     const filter =
@@ -67,7 +80,10 @@ export const getMyContacts = async (req, res) => {
           };
 
     const contacts = await Contact.find(filter)
-      .populate("property", "title price address images")
+      .populate({
+        path: "property",
+        select: "title price address images purpose propertyType",
+      })
       .populate("buyer", "name email phone")
       .populate("owner", "name email phone")
       .sort({ createdAt: -1 });
@@ -84,13 +100,16 @@ export const getMyContacts = async (req, res) => {
   }
 };
 
-/**
- * GET SINGLE CONTACT
- */
+/* ======================================================
+   GET SINGLE CONTACT
+====================================================== */
 export const getContactById = async (req, res) => {
   try {
     const contact = await Contact.findById(req.params.id)
-      .populate("property")
+      .populate({
+        path: "property",
+        select: "title price address images",
+      })
       .populate("buyer", "name email phone")
       .populate("owner", "name email phone");
 
@@ -98,11 +117,12 @@ export const getContactById = async (req, res) => {
       return sendResponse(res, 404, false, "Contact not found");
     }
 
-    if (
-      contact.buyer._id.toString() !== req.user._id.toString() &&
-      contact.owner._id.toString() !== req.user._id.toString() &&
-      req.user.role !== "admin"
-    ) {
+    const isAuthorized =
+      req.user.role === "admin" ||
+      contact.buyer._id.toString() === req.user._id.toString() ||
+      contact.owner._id.toString() === req.user._id.toString();
+
+    if (!isAuthorized) {
       return sendResponse(res, 403, false, "Access denied");
     }
 
@@ -118,9 +138,9 @@ export const getContactById = async (req, res) => {
   }
 };
 
-/**
- * DELETE CONTACT
- */
+/* ======================================================
+   DELETE CONTACT
+====================================================== */
 export const deleteContact = async (req, res) => {
   try {
     const contact = await Contact.findById(req.params.id);
@@ -129,10 +149,11 @@ export const deleteContact = async (req, res) => {
       return sendResponse(res, 404, false, "Contact not found");
     }
 
-    if (
-      contact.buyer.toString() !== req.user._id.toString() &&
-      req.user.role !== "admin"
-    ) {
+    const canDelete =
+      req.user.role === "admin" ||
+      contact.buyer.toString() === req.user._id.toString();
+
+    if (!canDelete) {
       return sendResponse(res, 403, false, "Access denied");
     }
 

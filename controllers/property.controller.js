@@ -1,15 +1,38 @@
-// ========================= property.controller.js (COMPLETE) =========================
 import Property from "../models/property.model.js";
 import User from "../models/user.model.js";
 import sendResponse from "../utils/apiResponse.js";
 
-/**
- * CREATE PROPERTY - Seedha active hoga
- */
+/* ======================================================
+   CREATE PROPERTY (USER)
+====================================================== */
 export const createProperty = async (req, res) => {
   try {
+    const {
+      title,
+      description,
+      purpose,
+      propertyType,
+      price,
+      area,
+      bedrooms,
+      bathrooms,
+      furnishing,
+      address,
+      images,
+    } = req.body;
+
     const property = await Property.create({
-      ...req.body,
+      title,
+      description,
+      purpose,
+      propertyType,
+      price,
+      area,
+      bedrooms,
+      bathrooms,
+      furnishing,
+      address,
+      images,
       owner: req.user._id,
       isActive: true,
     });
@@ -26,9 +49,9 @@ export const createProperty = async (req, res) => {
   }
 };
 
-/**
- * GET ALL PROPERTIES (Public + Filters)
- */
+/* ======================================================
+   GET ALL PROPERTIES (PUBLIC)
+====================================================== */
 export const getAllProperties = async (req, res) => {
   try {
     const {
@@ -55,7 +78,7 @@ export const getAllProperties = async (req, res) => {
       ];
     }
 
-    if (city) query["address.city"] = { $regex: city, $options: "i" };
+    if (city) query["address.city"] = new RegExp(city, "i");
     if (purpose) query.purpose = purpose;
     if (propertyType) query.propertyType = propertyType;
     if (bedrooms) query.bedrooms = Number(bedrooms);
@@ -70,7 +93,7 @@ export const getAllProperties = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const properties = await Property.find(query)
-      .populate("owner", "name email phone")
+      .populate("owner", "name phone")
       .sort(sort)
       .skip(skip)
       .limit(Number(limit));
@@ -91,14 +114,14 @@ export const getAllProperties = async (req, res) => {
   }
 };
 
-/**
- * GET SINGLE PROPERTY
- */
+/* ======================================================
+   GET SINGLE PROPERTY
+====================================================== */
 export const getPropertyById = async (req, res) => {
   try {
     const property = await Property.findById(req.params.id).populate(
       "owner",
-      "name email phone"
+      "name phone email"
     );
 
     if (!property || !property.isActive || property.isFlagged) {
@@ -120,9 +143,9 @@ export const getPropertyById = async (req, res) => {
   }
 };
 
-/**
- * GET MY PROPERTIES
- */
+/* ======================================================
+   GET MY PROPERTIES (USER)
+====================================================== */
 export const getMyProperties = async (req, res) => {
   try {
     const properties = await Property.find({ owner: req.user._id }).sort({
@@ -141,9 +164,9 @@ export const getMyProperties = async (req, res) => {
   }
 };
 
-/**
- * UPDATE PROPERTY (Owner only)
- */
+/* ======================================================
+   UPDATE PROPERTY (OWNER ONLY)
+====================================================== */
 export const updateProperty = async (req, res) => {
   try {
     const property = await Property.findById(req.params.id);
@@ -153,15 +176,27 @@ export const updateProperty = async (req, res) => {
     }
 
     if (property.owner.toString() !== req.user._id.toString()) {
-      return sendResponse(
-        res,
-        403,
-        false,
-        "You can update only your own property"
-      );
+      return sendResponse(res, 403, false, "Not allowed");
     }
 
-    Object.assign(property, req.body);
+    const allowedFields = [
+      "title",
+      "description",
+      "price",
+      "area",
+      "bedrooms",
+      "bathrooms",
+      "furnishing",
+      "images",
+      "address",
+    ];
+
+    allowedFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        property[field] = req.body[field];
+      }
+    });
+
     await property.save();
 
     return sendResponse(
@@ -176,9 +211,9 @@ export const updateProperty = async (req, res) => {
   }
 };
 
-/**
- * DELETE PROPERTY (Soft delete - Owner only)
- */
+/* ======================================================
+   DELETE PROPERTY (SOFT DELETE)
+====================================================== */
 export const deleteProperty = async (req, res) => {
   try {
     const property = await Property.findById(req.params.id);
@@ -188,12 +223,7 @@ export const deleteProperty = async (req, res) => {
     }
 
     if (property.owner.toString() !== req.user._id.toString()) {
-      return sendResponse(
-        res,
-        403,
-        false,
-        "You can delete only your own property"
-      );
+      return sendResponse(res, 403, false, "Not allowed");
     }
 
     property.isActive = false;
@@ -205,43 +235,41 @@ export const deleteProperty = async (req, res) => {
   }
 };
 
-/**
- * SAVE/UNSAVE PROPERTY
- */
+/* ======================================================
+   SAVE / UNSAVE PROPERTY
+====================================================== */
 export const toggleSaveProperty = async (req, res) => {
   try {
     const property = await Property.findById(req.params.id);
-
     if (!property || !property.isActive) {
       return sendResponse(res, 404, false, "Property not found");
     }
 
     const user = await User.findById(req.user._id);
 
-    const index = user.savedProperties.indexOf(req.params.id);
-
+    const index = user.savedProperties.indexOf(property._id);
     if (index > -1) {
       user.savedProperties.splice(index, 1);
       await user.save();
       return sendResponse(res, 200, true, "Property removed from saved");
-    } else {
-      user.savedProperties.push(req.params.id);
-      await user.save();
-      return sendResponse(res, 200, true, "Property saved successfully");
     }
+
+    user.savedProperties.push(property._id);
+    await user.save();
+    return sendResponse(res, 200, true, "Property saved successfully");
   } catch (error) {
     return sendResponse(res, 500, false, error.message);
   }
 };
 
-/**
- * GET SAVED PROPERTIES
- */
+/* ======================================================
+   GET SAVED PROPERTIES
+====================================================== */
 export const getSavedProperties = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).populate({
       path: "savedProperties",
-      populate: { path: "owner", select: "name email phone" },
+      populate: { path: "owner", select: "name phone" },
     });
 
     return sendResponse(
@@ -256,13 +284,13 @@ export const getSavedProperties = async (req, res) => {
   }
 };
 
-/**
- * ADMIN: Get all properties (including flagged)
- */
+/* ======================================================
+   ADMIN: GET ALL PROPERTIES
+====================================================== */
 export const getAllPropertiesAdmin = async (req, res) => {
   try {
     const properties = await Property.find()
-      .populate("owner", "name email phone")
+      .populate("owner", "name phone email")
       .sort({ createdAt: -1 });
 
     return sendResponse(
@@ -277,15 +305,14 @@ export const getAllPropertiesAdmin = async (req, res) => {
   }
 };
 
-/**
- * ADMIN: Flag/Unflag property
- */
+/* ======================================================
+   ADMIN: FLAG / UNFLAG PROPERTY
+====================================================== */
 export const flagProperty = async (req, res) => {
   try {
     const { reason } = req.body;
 
     const property = await Property.findById(req.params.id);
-
     if (!property) {
       return sendResponse(res, 404, false, "Property not found");
     }
