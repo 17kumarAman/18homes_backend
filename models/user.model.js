@@ -1,26 +1,110 @@
-// ========================= MODELS =========================
-
-// user.model.js
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
+// ================= ADDRESS SUB-SCHEMA =================
+const addressSchema = new mongoose.Schema(
+  {
+    houseNo: { type: String, trim: true },
+    street: { type: String, trim: true },
+    locality: { type: String, trim: true },
+    city: { type: String, trim: true },
+    district: { type: String, trim: true },
+    state: { type: String, trim: true },
+    pincode: {
+      type: String,
+      match: [/^[1-9][0-9]{5}$/, "Invalid Indian pincode"],
+    },
+    country: {
+      type: String,
+      default: "India",
+    },
+  },
+  { _id: false }
+);
+
+// ================= USER SCHEMA =================
 const userSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true },
-    phone: { type: String, required: true },
-    password: { type: String, required: true, select: false },
-    role: { type: String, enum: ["admin", "user"], default: "user" },
-    avatar: String,
-    isBlocked: { type: Boolean, default: false },
+    // BASIC INFO
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+    },
+
+    phone: {
+      type: String,
+      match: [/^[6-9][0-9]{9}$/, "Invalid Indian mobile number"],
+    },
+
+    password: {
+      type: String,
+      required: true,
+      select: false,
+    },
+
+    avatar: {
+      type: String, // Cloudinary URL
+    },
+
+    // USER ROLE & TYPE
+    role: {
+      type: String,
+      enum: ["admin", "user"],
+      default: "user",
+    },
+
+    // userType: {
+    //   type: String,
+    //   enum: ["buyer", "seller", "agent"],
+    //   default: "buyer",
+    // },
+
+    // ADDRESS
+    address: addressSchema,
+
+    // OPTIONAL KYC (Future ready)
+    kyc: {
+      aadhaarNumber: {
+        type: String,
+        select: false,
+      },
+      panNumber: {
+        type: String,
+        uppercase: true,
+        select: false,
+      },
+      isVerified: {
+        type: Boolean,
+        default: false,
+      },
+    },
+
+    // REAL ESTATE RELATED
     savedProperties: [
-      { type: mongoose.Schema.Types.ObjectId, ref: "Property" }
+      { type: mongoose.Schema.Types.ObjectId, ref: "Property" },
     ],
-    lastLogin: Date
+
+    isBlocked: {
+      type: Boolean,
+      default: false,
+    },
+
+    lastLogin: {
+      type: Date,
+    },
   },
   { timestamps: true }
 );
 
+// ================= PASSWORD HASH =================
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
   this.password = await bcrypt.hash(this.password, 10);
