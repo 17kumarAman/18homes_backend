@@ -20,6 +20,10 @@ app.use(
 
 app.use(express.json());
 
+app.get("/", (req, res) => {
+  res.send("Welcome to the Real Estate API");
+} );
+
 app.use("/api/media", mediaRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/properties", propertyRoutes);
@@ -27,3 +31,4 @@ app.use("/api/contacts", contactRoutes);
 app.use("/api/users", userRoutes);
 
 export default app;
+
